@@ -1,0 +1,51 @@
+alias: Bathroom fan control
+description: ''
+mode: restart
+triggers:
+  - trigger: state
+    entity_id: sensor.humidity_sensor_humidity
+  - trigger: time
+    at: "22:00:00"
+  - trigger: time
+    at: "08:00:00"
+  - trigger: homeassistant
+    event: start
+
+variables:
+  # --- your settings ---
+  quiet_speed: 1
+  low_speed: 2
+  high_speed: 4
+  quiet_start: "22:00:00"
+  quiet_end: "08:00:00"
+  high_humidity: 75
+  resume_humidity: 70
+  # --- humidity sensor ---
+  humidity_entity: sensor.humidity_sensor_humidity
+  # --- calculations ---
+  humidity: "{{ states(humidity_entity) | float(none) }}"
+  now_time: "{{ now().strftime('%H:%M:%S') }}"
+  is_quiet: "{{ now_time >= quiet_start or now_time < quiet_end }}"
+  normal_speed: "{{ quiet_speed if is_quiet else low_speed }}"
+  currently_high: "{{ is_state('light.enervent_light_4', 'on') }}"
+  target_speed: >
+    {% if humidity > high_humidity %}
+      {{ high_speed }}
+    {% elif humidity < resume_humidity %}
+      {{ normal_speed }}
+    {% elif currently_high %}
+      {{ high_speed }}
+    {% else %}
+      {{ normal_speed }}
+    {% endif %}
+
+conditions:
+  - condition: template
+    value_template: "{{ humidity is not none }}"
+
+actions:
+  - action: light.turn_on
+    metadata: {}
+    target:
+      entity_id: "light.enervent_light_{{ target_speed | trim }}"
+    data: {}
