@@ -4,39 +4,44 @@ mode: restart
 triggers:
   - trigger: state
     entity_id: sensor.humidity_sensor_humidity
+  - trigger: state
+    entity_id:
+      - input_number.fan_quiet_speed
+      - input_number.fan_normal_speed
+      - input_number.fan_high_speed
+      - input_number.bathroom_high_humidity
+      - input_number.bathroom_resume_humidity
   - trigger: time
-    at: "22:00:00"
+    at: input_datetime.quiet_time_start
   - trigger: time
-    at: "08:00:00"
+    at: input_datetime.quiet_time_end
   - trigger: homeassistant
     event: start
 
 variables:
-  # --- your settings ---
-  quiet_speed: 1
-  low_speed: 2
-  high_speed: 4
-  quiet_start: "22:00:00"
-  quiet_end: "08:00:00"
-  high_humidity: 75
-  resume_humidity: 70
-  # --- humidity sensor ---
-  humidity_entity: sensor.humidity_sensor_humidity
+  # --- settings, all from helpers ---
+  quiet_speed: "{{ states('input_number.fan_quiet_speed') | float(1) | int }}"
+  normal_speed: "{{ states('input_number.fan_normal_speed') | float(2) | int }}"
+  high_speed: "{{ states('input_number.fan_high_speed') | float(4) | int }}"
+  high_humidity: "{{ states('input_number.bathroom_high_humidity') | float(75) }}"
+  resume_humidity: "{{ states('input_number.bathroom_resume_humidity') | float(70) }}"
+  quiet_start: "{{ states('input_datetime.quiet_time_start') }}"
+  quiet_end: "{{ states('input_datetime.quiet_time_end') }}"
   # --- calculations ---
-  humidity: "{{ states(humidity_entity) | float(none) }}"
+  humidity: "{{ states('sensor.humidity_sensor_humidity') | float(none) }}"
   now_time: "{{ now().strftime('%H:%M:%S') }}"
   is_quiet: "{{ now_time >= quiet_start or now_time < quiet_end }}"
-  normal_speed: "{{ quiet_speed if is_quiet else low_speed }}"
-  currently_high: "{{ is_state('light.enervent_light_4', 'on') }}"
+  base_speed: "{{ quiet_speed if is_quiet else normal_speed }}"
+  currently_high: "{{ is_state('light.enervent_light_' ~ high_speed, 'on') }}"
   target_speed: >
     {% if humidity > high_humidity %}
       {{ high_speed }}
     {% elif humidity < resume_humidity %}
-      {{ normal_speed }}
+      {{ base_speed }}
     {% elif currently_high %}
       {{ high_speed }}
     {% else %}
-      {{ normal_speed }}
+      {{ base_speed }}
     {% endif %}
 
 conditions:
@@ -47,5 +52,5 @@ actions:
   - action: light.turn_on
     metadata: {}
     target:
-      entity_id: "light.enervent_light_{{ target_speed | trim }}"
+      entity_id: "light.enervent_light_{{ target_speed | int }}"
     data: {}
